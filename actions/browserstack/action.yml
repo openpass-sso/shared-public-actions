@@ -1,5 +1,5 @@
-name: Browserstack Android Action
-description: Uploads an Android app to Browserstack and runs the tests
+name: Browserstack Action
+description: Uploads an Android or iOS app to Browserstack and runs the tests
 inputs:
   browserstackUsername:
     description: Browserstack Username
@@ -8,9 +8,13 @@ inputs:
   project:
     description: Projectname
   appFilePath:
-    description: Flutter Android apk
+    description: Android apk
   testFilePath:
-    description: Flutter Android androidTest apk
+    description: Android androidTest apk
+  iosAppFilePath:
+    description: iOS IPA
+  iosTestFilePath:
+    description: iOS Test Runner
   devices:
     description: >-
       Devices to test on see
@@ -21,9 +25,9 @@ inputs:
     description: Custom Id for the uploaded files
 outputs:
   app_url:
-    description: The app url for the Android APK on Browserstack
+    description: The 'app' url on Browserstack
   test_suite_url:
-    description: The test file url for the Android APK on Browserstack
+    description: The 'test_suite' url on Browserstack
   build_id:
     description: The build id for the triggered testrun
   test_result:

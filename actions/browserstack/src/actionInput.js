@@ -16,8 +16,11 @@ class ActionInput {
         this.devices = core.getInput('devices');
         this.customId = core.getInput('customId');
         this.buildTag = core.getInput('buildTag');
+        this.iosAppFilePath = core.getInput('iosAppFilePath');
+        this.iosTestFilePath = core.getInput('iosTestFilePath');
 
         this.isAndroid = this.appFilePath && this.testFilePath;
+        this.isIOS = this.iosAppFilePath && this.iosTestFilePath;
     }
 
     _validateInput() {
@@ -28,8 +31,8 @@ class ActionInput {
             throw Error(`browserstackAccessKey not set`);
         }
 
-        if (!this.appFilePath && !this.testFilePath) {
-            throw Error(`Action needs appFilePath & testFilePath (Android) defined`);
+        if (!this.isAndroid && !this.isIOS) {
+            throw Error(`Action needs appFilePath & testFilePath (Android) defined or iosAppFilePath & iosTestFilePath (iOS) defined`);
         }
 
         if (!this.devices) {
@@ -44,8 +47,12 @@ class ActionInput {
             throw Error(`App specified in testFilePath doesn't exist`);
         }
 
-        if (this.testPackagePath && !fs.existsSync(this.testPackagePath)) {
-            throw Error(`Package specified in testPackagePath doesn't exist`);
+        if (this.iosAppFilePath && !fs.existsSync(this.iosAppFilePath)) {
+            throw Error(`App specified in iosAppFilePath doesn't exist`);
+        }
+
+        if (this.iosTestFilePath && !fs.existsSync(this.iosTestFilePath)) {
+            throw Error(`App specified in iosTestFilePath doesn't exist`);
         }
     }
 }
