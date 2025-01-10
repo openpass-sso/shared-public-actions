@@ -98,6 +98,9 @@ jobs:
           git add gradle.properties
           git commit -m "Prepare for release: ${{ inputs.version }}"
 
+      - name : Build Locally
+        run: ./gradlew build
+
       - name: Deploy v${{ inputs.version }} (GitHub)
         if: ${{ inputs.deploy-github == true }}
         run: ./gradlew publish
@@ -113,10 +116,6 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONOTYPE_MAVEN_ACCOUNT_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_GPG_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_GPG_SIGNING_PASSPHRASE }}
-
-      - name : Build Locally
-        if: ${{ inputs.deploy-github == false && inputs.deploy-maven == false }}
-        run: ./gradlew build
 
       - name: Tag release
         run: |
