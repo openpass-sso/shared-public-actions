@@ -33,8 +33,7 @@ on:
         required: false
 
       release_assets:
-        description:
-        default: 'Newline-delimited list of path globs for asset files to upload as part of the GitHub release'
+        description: 'Newline-delimited list of path globs for asset files to upload as part of the GitHub release'
         type: string
         required: false
 
@@ -71,9 +70,6 @@ jobs:
         run: |
           git config --local user.name "openpass-sso"
           git config --local user.email openpass-sso@users.noreply.github.com
-
-      - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v4
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
