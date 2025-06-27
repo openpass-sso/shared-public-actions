@@ -50,7 +50,7 @@ jobs:
         if: ${{ inputs.deploy-snapshot-maven == true }}
         run: ./gradlew publish --stacktrace
         env:
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONOTYPE_MAVEN_ACCOUNT_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONOTYPE_MAVEN_ACCOUNT_PASSWORD }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.CENTRAL_SONATYPE_MAVEN_ACCOUNT_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.CENTRAL_SONATYPE_MAVEN_ACCOUNT_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_GPG_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_GPG_SIGNING_PASSPHRASE }}
