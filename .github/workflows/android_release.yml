@@ -36,6 +36,23 @@ on:
         description: 'Newline-delimited list of path globs for asset files to upload as part of the GitHub release'
         type: string
         required: false
+    secrets:
+      ORG_GRADLE_PROJECT_OPEN_PASS_RELEASE_KEYSTORE_PWD:
+        required: false
+      ORG_GRADLE_PROJECT_OPEN_PASS_RELEASE_KEY_PWD:
+        required: false
+      ENCRYPT_KEY:
+        required: false
+      RELEASE_VERSION_BOT_PRIVATE_KEY:
+        required: false
+      CENTRAL_SONATYPE_MAVEN_ACCOUNT_USERNAME:
+        required: false
+      CENTRAL_SONATYPE_MAVEN_ACCOUNT_PASSWORD:
+        required: false
+      MAVEN_GPG_SIGNING_KEY:
+        required: false
+      MAVEN_GPG_SIGNING_PASSPHRASE:
+        required: false
 
 jobs:
   publish:
@@ -72,7 +89,9 @@ jobs:
           git config --local user.email openpass-sso@users.noreply.github.com
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ac638b010cf58a27ee6c972d7336334ccaf61c96 # v4.4.1
+        with:
+          cache-disabled: true
 
       - name: Decrypt secrets
         if: ${{ inputs.decrypt-secrets == true }}
@@ -82,17 +101,24 @@ jobs:
 
       - name: Get Snapshot versions
         id: snapshot-versions
-        run: ./scripts/get_snapshot_versions.sh ${{ inputs.snapshot }}
+        run: ./scripts/get_snapshot_versions.sh "${INPUTS_SNAPSHOT}"
+        env:
+          INPUTS_SNAPSHOT: ${{ inputs.snapshot }}
 
       - name: Update Gradle properties
         shell: bash
         run: |
-          sed -i.bak "s/${{ steps.snapshot-versions.outputs.cur_snapshot_version }}/${{ inputs.version }}/g" gradle.properties
+          sed -i.bak "s/${CUR_SNAPSHOT_VERSION}/${INPUTS_VERSION}/g" gradle.properties
+        env:
+          CUR_SNAPSHOT_VERSION: ${{ steps.snapshot-versions.outputs.cur_snapshot_version }}
+          INPUTS_VERSION: ${{ inputs.version }}
 
       - name: Commit Gradle properties
         run: |
           git add gradle.properties
-          git commit -m "Prepare for release: ${{ inputs.version }}"
+          git commit -m "Prepare for release: ${INPUTS_VERSION}"
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
 
       - name : Build Locally
         run: ./gradlew build
@@ -115,17 +141,24 @@ jobs:
 
       - name: Tag release
         run: |
-          git tag "v${{ inputs.version }}"
+          git tag "v${INPUTS_VERSION}"
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
 
       - name: Update Gradle properties (Snapshot)
         shell: bash
         run: |
-          sed -i.bak "s/${{ inputs.version }}/${{ steps.snapshot-versions.outputs.new_snapshot_version }}/g" gradle.properties
+          sed -i.bak "s/${INPUTS_VERSION}/${NEW_SNAPSHOT_VERSION}/g" gradle.properties
+        env:
+          INPUTS_VERSION: ${{ inputs.version }}
+          NEW_SNAPSHOT_VERSION: ${{ steps.snapshot-versions.outputs.new_snapshot_version }}
 
       - name: Commit Gradle properties (Snapshot)
         run: |
           git add gradle.properties
-          git commit -m "Prepare next development version: ${{ steps.snapshot-versions.outputs.new_snapshot_version }}"
+          git commit -m "Prepare next development version: ${NEW_SNAPSHOT_VERSION}"
+        env:
+          NEW_SNAPSHOT_VERSION: ${{ steps.snapshot-versions.outputs.new_snapshot_version }}
 
       - name: Cleanup
         shell: bash
@@ -134,26 +167,26 @@ jobs:
 
       - name: Authenticate using Release Version GitHub App
         id: auth
-        uses: tibdex/github-app-token@v1
+        uses: tibdex/github-app-token@32691ba7c9e7063bd457bd8f2a5703138591fa58 # v1.9.0
         with:
           app_id: ${{ vars.RELEASE_VERSION_BOT_APP_ID }}
           private_key: ${{ secrets.RELEASE_VERSION_BOT_PRIVATE_KEY }}
 
       - name: Push changes
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa # master on Jul 1, 2024
         with:
           branch: ${{ github.ref }}
           github_token: ${{ steps.auth.outputs.token }}
 
       - name: Push changes to tag
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa # master on Jul 1, 2024
         with:
           branch: ${{ github.ref }}
           tags: true
           push_only_tags: true
 
       - name: GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           files: ${{ inputs.release_assets }}
           generate_release_notes: true
