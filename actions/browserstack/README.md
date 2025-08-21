@@ -32,6 +32,10 @@ This action fulfils the following objectives in your runner environment:
     * Optional buildTag for the testrun that will be shown on BrowserStack
 * `customId`:
     * Optional customId for the uploaded packages that will be shown on BrowserStack
+* `deviceId`:
+    * Optional deviceId - if the device used is a dedicated (private) device this is required
+* `enablePasscode`:
+    * Optional enablePasscode boolean - turns on screen lock for the device
 
 Either `appFilePath` and `testFilePath`, or `iosAppFilePath` and `iosTestFilePath` should be provided. Running tests on both Android and iOS in a single invocation is not supported.
 

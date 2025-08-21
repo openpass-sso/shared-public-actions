@@ -19,6 +19,10 @@ inputs:
     description: >-
       Devices to test on see
       https://www.browserstack.com/list-of-browsers-and-platforms/app_automate
+  deviceId:
+    description: Device ID if using a dedicated (private) device
+  enablePasscode:
+    description: Enable passcode for the device
   buildTag:
     description: Build Tag for the triggered testrun
   customId:
