@@ -84,6 +84,7 @@ class Browserstack {
         if (actionInput.buildTag) body.buildTag = actionInput.buildTag;
         if (actionInput.deviceId) body.deviceId = actionInput.deviceId;
         if (actionInput.enablePasscode === 'true') body.enablePasscode = true;
+        if (actionInput.dedicatedDevice === 'true') body.dedicatedDevice = true;
 
         const options = {
             url: `https://${actionInput.browserstackUsername}:${actionInput.browserstackAccessKey}@${ANDROID_TRIGGER_BUILD_ENDPOINT}`,

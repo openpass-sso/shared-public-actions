@@ -22,7 +22,9 @@ inputs:
   deviceId:
     description: Device ID if using a dedicated (private) device
   enablePasscode:
-    description: Enable passcode for the device
+    description: Enable passcode boolean for the device
+  dedicatedDevice:
+    description: Set to true if testing on dedicated (private) device
   buildTag:
     description: Build Tag for the triggered testrun
   customId:

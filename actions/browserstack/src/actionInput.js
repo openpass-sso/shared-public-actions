@@ -18,6 +18,7 @@ class ActionInput {
         this.deviceId = core.getInput('deviceId');
         this.buildTag = core.getInput('buildTag');
         this.enablePasscode = core.getInput('enablePasscode');
+        this.dedicatedDevice = core.getInput('dedicatedDevice');
         this.iosAppFilePath = core.getInput('iosAppFilePath');
         this.iosTestFilePath = core.getInput('iosTestFilePath');
 

@@ -34,6 +34,8 @@ This action fulfils the following objectives in your runner environment:
     * Optional customId for the uploaded packages that will be shown on BrowserStack
 * `deviceId`:
     * Optional deviceId - if the device used is a dedicated (private) device this is required
+* `dedicatedDevice`:
+    * Optional dedicated device boolean - set to true if testing on dedicated (private) device
 * `enablePasscode`:
     * Optional enablePasscode boolean - turns on screen lock for the device
 
