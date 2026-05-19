@@ -1,0 +1,98 @@
+name: "Security: Zizmor Scan"
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: "zizmor supports a configuration file"
+        required: false
+        type: string
+      inputs:
+        description: "whitespace-separated list of inputs to pass to zizmor"
+        required: false
+        default: .
+        type: string
+      min-confidence:
+        required: false
+        type: string
+      min-severity:
+        required: false
+        type: string
+      online-audits:
+        required: false
+        default: true
+        type: boolean
+      persona:
+        required: false
+        default: regular
+        type: string
+
+permissions:
+  contents: read  # needed for private and internal repos
+  actions: read  # needed to read workflow files
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ZIZMOR_VERSION: 1.25.2
+      INPUT_CONFIG: ${{ inputs.config }}
+      INPUT_PERSONA: ${{ inputs.persona }}
+      INPUT_MIN_SEVERITY: ${{ inputs.min-severity }}
+      INPUT_MIN_CONFIDENCE: ${{ inputs.min-confidence }}
+      INPUT_INPUTS: ${{ inputs.inputs }}
+      INPUT_NO_ONLINE_AUDITS: ${{ inputs.online-audits == false && 'true' || '' }}
+
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.14"
+          enable-cache: true
+          cache-dependency-glob: ""
+          cache-suffix: ${{ env.ZIZMOR_VERSION }}
+
+      - name: Run zizmor SARIF report
+        # INPUT_INPUTS is intentionally unquoted to allow word-splitting for multiple inputs
+        run: |
+          uvx zizmor@"${ZIZMOR_VERSION}" --format=sarif \
+            ${INPUT_CONFIG:+--config "$INPUT_CONFIG"} \
+            ${INPUT_PERSONA:+--persona "$INPUT_PERSONA"} \
+            ${INPUT_MIN_SEVERITY:+--min-severity "$INPUT_MIN_SEVERITY"} \
+            ${INPUT_MIN_CONFIDENCE:+--min-confidence "$INPUT_MIN_CONFIDENCE"} \
+            ${INPUT_NO_ONLINE_AUDITS:+--no-online-audits} \
+            ${INPUT_INPUTS} > zizmor-results.sarif
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run zizmor
+        if: cancelled() == false
+        # INPUT_INPUTS is intentionally unquoted to allow word-splitting for multiple inputs
+        run: |
+          uvx zizmor@"${ZIZMOR_VERSION}" --format=github \
+            ${INPUT_CONFIG:+--config "$INPUT_CONFIG"} \
+            ${INPUT_PERSONA:+--persona "$INPUT_PERSONA"} \
+            ${INPUT_MIN_SEVERITY:+--min-severity "$INPUT_MIN_SEVERITY"} \
+            ${INPUT_MIN_CONFIDENCE:+--min-confidence "$INPUT_MIN_CONFIDENCE"} \
+            ${INPUT_NO_ONLINE_AUDITS:+--no-online-audits} \
+            ${INPUT_INPUTS}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Print docs link on failure
+        if: failure()
+        run: echo "::notice::💡📖 Rule docs and remediation examples available at https://docs.zizmor.sh/audits/ 💡📖"
+
+      - name: Upload SARIF report
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: zizmor-sarif-report
+          path: zizmor-results.sarif
+          retention-days: 1

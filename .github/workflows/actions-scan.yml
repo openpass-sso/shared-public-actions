@@ -1,0 +1,22 @@
+name: "Security: Actions Scan"
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/**'
+
+  # this allows to manually run this job
+  workflow_dispatch:
+
+permissions:
+  contents: read  # needed for private or internal repos
+  actions: read  # needed for workflow API
+
+jobs:
+  pinact-scan:
+    uses: ./.github/workflows/pinact-scan.yml
+
+  zizmor-scan:
+    uses: ./.github/workflows/zizmor-scan.yml

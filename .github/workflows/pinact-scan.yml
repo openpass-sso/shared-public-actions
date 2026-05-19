@@ -1,0 +1,61 @@
+name: "Security: Pinact Scan"
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: "pinact supports a configuration file"
+        required: false
+        type: string
+
+permissions:
+  contents: read  # needed for private or internal repos
+
+jobs:
+  pinact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install pinact
+        run: |
+          gh release download ${PINACT_VERSION} \
+            -R ${PINACT_REPO} \
+            -p ${PINACT_RELEASE}  &&
+          echo "${PINACT_RELEASE_SHA#sha256:} ${PINACT_RELEASE}" | sha256sum -c - &&
+          mkdir -p "$HOME/.local/bin" &&
+          tar -xzf ${PINACT_RELEASE} -C "$HOME/.local/bin" pinact
+        env:
+          # You can find the version and SHA in GitHub Release assets list
+          PINACT_VERSION: v3.9.2
+          PINACT_RELEASE: pinact_linux_amd64.tar.gz
+          PINACT_RELEASE_SHA: sha256:6adcc8a2217e4114e0841f8bca0cddf9958a9c52e3e89760c35b791cdba1a916
+          PINACT_REPO: suzuki-shunsuke/pinact
+          GH_TOKEN: ${{ github.token }}
+    
+      - name: Check actions are pinned to commit SHAs
+        run: pinact run --check --diff -c "${CONFIG}"
+        env:
+          CONFIG: ${{ inputs.config }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify pinned SHAs match their version tags
+        if: cancelled() == false
+        # Filter out noisy notice-level messages
+        run: pinact run --verify -c "${CONFIG}" --format sarif > pinact-results.sarif 2> >(grep -v "^::notice" >&2)
+        env:
+          CONFIG: ${{ inputs.config }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload SARIF report
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: pinact-sarif-report
+          path: pinact-results.sarif
+          retention-days: 1
