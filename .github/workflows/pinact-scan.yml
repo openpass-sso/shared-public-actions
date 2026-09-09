@@ -36,13 +36,21 @@ jobs:
           PINACT_RELEASE: pinact_linux_amd64.tar.gz
           PINACT_RELEASE_SHA: sha256:6adcc8a2217e4114e0841f8bca0cddf9958a9c52e3e89760c35b791cdba1a916
           PINACT_REPO: suzuki-shunsuke/pinact
-          GH_TOKEN: ${{ github.token }}
-    
+          # GITHUB_TOKEN, not GH_TOKEN: gh CLI reads either (GH_TOKEN first, GITHUB_TOKEN as
+          # fallback), and pinact itself (invoked below) only reads GITHUB_TOKEN/PINACT_GITHUB_TOKEN
+          # -- one env var authenticates both instead of two that mean different things depending on
+          # the step.
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Check actions are pinned to commit SHAs
         run: pinact run --check --diff -c "${CONFIG}"
         env:
           CONFIG: ${{ inputs.config }}
-          GH_TOKEN: ${{ github.token }}
+          # Without this, pinact silently falls back to unauthenticated GitHub API requests
+          # (60/hour, shared across every anonymous caller on the runner IP pool) instead of the
+          # ~1,000/hour authenticated quota, which intermittently 403s this step under any real CI
+          # load.
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Verify pinned SHAs match their version tags
         if: cancelled() == false
@@ -50,7 +58,7 @@ jobs:
         run: pinact run --verify -c "${CONFIG}" --format sarif > pinact-results.sarif 2> >(grep -v "^::notice" >&2)
         env:
           CONFIG: ${{ inputs.config }}
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Upload SARIF report
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
