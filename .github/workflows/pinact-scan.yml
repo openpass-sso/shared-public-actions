@@ -32,9 +32,9 @@ jobs:
           tar -xzf ${PINACT_RELEASE} -C "$HOME/.local/bin" pinact
         env:
           # You can find the version and SHA in GitHub Release assets list
-          PINACT_VERSION: v3.9.2
+          PINACT_VERSION: v5.0.2
           PINACT_RELEASE: pinact_linux_amd64.tar.gz
-          PINACT_RELEASE_SHA: sha256:6adcc8a2217e4114e0841f8bca0cddf9958a9c52e3e89760c35b791cdba1a916
+          PINACT_RELEASE_SHA: sha256:7f003d8f51e984c2264d2009d430e3e0e87ae404a0e2dc2a9a277b0f731bf5b7
           PINACT_REPO: suzuki-shunsuke/pinact
           # GITHUB_TOKEN, not GH_TOKEN: gh CLI reads either (GH_TOKEN first, GITHUB_TOKEN as
           # fallback), and pinact itself (invoked below) only reads GITHUB_TOKEN/PINACT_GITHUB_TOKEN
