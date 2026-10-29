@@ -1,0 +1,212 @@
+name: "Security: Dependency Scan"
+
+# Scans Software Bill of Materials (SBOM) files for known vulnerabilities with Grype.
+#
+# Trust model: Grype is treated as untrusted code. This job
+#   - gets no token permissions, no secrets and no cloud credentials
+#   - never checks out the repository and only reads an artifact that an earlier job produced
+#   - runs on its own runner, separate from the job that builds and pushes the image
+#   - only writes a report artifact, so the worst a compromised Grype can do is lie in that report
+# Keep it that way: do not add secrets, id-token or checkout steps here.
+#
+# Input artifact layout (built by the caller):
+#   sbom/*.json            SBOMs to scan (SPDX or CycloneDX)
+#   config/grype.yaml      optional Grype config
+# VEX documents are deliberately not supported: they suppress findings, and we do not want that without a review path.
+#
+# Cache: the Grype vulnerability DB is cached. Cache access is set by the caller with `cache-mode` on the
+# calling job: `write` only for trusted runs from the default branch, `read` for everything else.
+# GitHub enforces it, and this workflow cannot get more than the caller grants.
+#
+
+on:
+  workflow_call:
+    inputs:
+      sbom-artifact:
+        description: "Name of the artifact with the sbom/ and config/ folders described in the header"
+        required: true
+        type: string
+      fail-on:
+        description: "Fail on vulnerabilities at or above this severity (negligible, low, medium, high, critical)."
+        required: false
+        type: string
+        default: "critical"
+      report-artifact:
+        description: "Name of the artifact the reports are uploaded as"
+        required: false
+        type: string
+        default: "grype-reports"
+      retention-days:
+        description: "How long to keep the report artifact"
+        required: false
+        type: number
+        default: 30
+
+permissions: {}
+
+jobs:
+  grype-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    env:
+      # Update version and SHA together. The SHA is in the release's grype_<version>_checksums.txt
+      GRYPE_REPO: anchore/grype
+      GRYPE_VERSION: v0.121.0
+      GRYPE_RELEASE_SHA: sha256:64e07133d3486115de647a66581461dccf5c732748a0a3119077395565f15519
+      GRYPE_SIGNER_IDENTITY: https://github.com/anchore/grype/.github/workflows/release.yaml@refs/heads/main
+
+    steps:
+      - name: Download scan inputs
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ${{ inputs.sbom-artifact }}
+          path: scan-inputs
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Download and verify Grype
+        run: |
+          base="https://github.com/${GRYPE_REPO}/releases/download/${GRYPE_VERSION}"
+          tarball="grype_${GRYPE_VERSION#v}_linux_amd64.tar.gz"
+          checksums="grype_${GRYPE_VERSION#v}_checksums.txt"
+
+          mkdir -p "$RUNNER_TEMP/grype-download" "$RUNNER_TEMP/grype-bin"
+          cd "$RUNNER_TEMP/grype-download"
+          curl -sSfL "$base/$tarball"                   -o "$tarball"
+          curl -sSfL "$base/$checksums"                 -o "$checksums"
+          curl -sSfL "$base/$checksums.sigstore.json"   -o "$checksums.sigstore.json"
+
+          # 1. The checksums file was signed by Anchore's release workflow
+          cosign verify-blob \
+            --bundle "$checksums.sigstore.json" \
+            --certificate-identity "$GRYPE_SIGNER_IDENTITY" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$checksums"
+          # 2. The tarball matches the signed checksums
+          grep " ${tarball}\$" "$checksums" | sha256sum -c -
+          # 3. The tarball matches the hash pinned here, so a swapped release also needs a change in this repo
+          echo "${GRYPE_RELEASE_SHA#sha256:}  $tarball" | sha256sum -c -
+
+          tar -xzf "$tarball" -C "$RUNNER_TEMP/grype-bin" grype
+          echo "$RUNNER_TEMP/grype-bin" >> "$GITHUB_PATH"
+
+      - name: Get cache date
+        id: cache-date
+        # The DB changes daily, so the key changes daily and restore-keys falls back to the latest older DB
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Grype DB
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/grype-db
+          key: grype-db-${{ env.GRYPE_VERSION }}-${{ steps.cache-date.outputs.date }}
+          restore-keys: |
+            grype-db-${{ env.GRYPE_VERSION }}-
+
+      - name: Scan SBOMs
+        run: |
+          shopt -s nullglob
+          sboms=(scan-inputs/sbom/*.json)
+          if [ ${#sboms[@]} -eq 0 ]; then
+            echo "::error::No SBOM files found in scan-inputs/sbom"
+            exit 1
+          fi
+
+          # Optional config that came with the SBOMs
+          common_args=()
+          if [ -f scan-inputs/config/grype.yaml ]; then
+            common_args+=(--config scan-inputs/config/grype.yaml)
+          fi
+          if [ -n "$FAIL_ON" ]; then
+            common_args+=(--fail-on "$FAIL_ON")
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          <details><summary>How to read this Grype scanner report</summary>
+
+          Each section below is one Software Bill of Materials (SBOM), a list of the software that was scanned.
+          It records exactly which package versions were inside that build, so it can be used later by any tool that reads SPDX or CycloneDX formats.
+
+          | Column | Meaning |
+          |---|---|
+          | FIXED IN | The first version that fixes it. Upgrade to this version or later. Blank or `(won't fix)` means no fix is published |
+          | SEVERITY | How bad it would be if it were exploited. It says nothing about how likely that is |
+          | EPSS | The chance it is exploited in the wild in the next 30 days, with its percentile among all known vulnerabilities |
+          | RISK | Grype's own 0-100 score from severity, EPSS and known-exploited status. Rows are sorted by it, so start at the top |
+
+          How to use it:
+          - Fix first what has a high RISK or EPSS and ships in the app.
+          - A finding is not always exploitable in this app. Packages that only build the app are not shipped. Run `npm ls <package>` to see why a package is installed.
+          - Prefer removing an unused package.
+          - Grype only reports known vulnerabilities for what is listed in the SBOM, so anything downloaded at runtime is not covered.
+
+          See https://oss.anchore.com/docs/guides/vulnerability/interpreting-results/ for more information.
+
+          </details>
+
+          EOF
+
+          mkdir -p reports
+          status=0
+          for sbom in "${sboms[@]}"; do
+            name="$(basename "$sbom" .json)"
+
+            # Keep going so every SBOM gets a report, then fail at the end
+            grype "sbom:${sbom}" "${common_args[@]}" \
+              -o "table=reports/grype-${name}.txt" -o "json=reports/grype-${name}.json" || status=1
+
+            {
+              echo "### Grype: ${name}"
+              # What was scanned, by ecosystem (purl type). Works for SPDX and CycloneDX SBOMs.
+              # Binaries such as Node have no vulnerability row unless they have a finding, so list them here.
+              jq -r '
+                [ ((.packages // [])[]
+                    | select((.SPDXID // "") | startswith("SPDXRef-DocumentRoot") | not)
+                    | {name, version: .versionInfo, purl: ([.externalRefs[]? | select(.referenceType == "purl") | .referenceLocator][0])}),
+                  ((.components // [])[]
+                    | {name, version, purl: .purl})
+                ] as $p
+                | ($p | map(.purl // "" | if . == "" then "other" else (split(":")[1] | split("/")[0]) end)
+                     | group_by(.) | map({t: .[0], n: length}) | sort_by(-.n) | map("\(.n) \(.t)") | join(" · ")) as $types
+                | ($p | map(select((.purl // "") | startswith("pkg:generic/")) | "\(.name) \(.version)") | join(", ")) as $bins
+                | "**Scanned \($p | length) packages:** \($types)"
+                  + (if $bins != "" then "\n\n**Binaries detected:** \($bins)" else "" end)
+              ' "$sbom" || true
+              echo
+              if [ -f "reports/grype-${name}.json" ]; then
+                # Counts are findings (a CVE in two packages counts twice)
+                jq -r '
+                  [.matches[].vulnerability.severity] as $s
+                  | ["Critical", "High", "Medium", "Low", "Negligible", "Unknown"]
+                  | map(. as $k | {k: $k, n: ($s | map(select(. == $k)) | length)})
+                  | map(select(.n > 0 or (.k | IN("Critical", "High", "Medium", "Low"))))
+                  | map("\(.n) \(.k)") | join(" · ")
+                  | "**\($s | length) findings:** " + .
+                ' "reports/grype-${name}.json" || true
+                echo
+              fi
+              echo '```'
+              head -n 100 "reports/grype-${name}.txt"
+              echo '```'
+              if [ "$(wc -l < "reports/grype-${name}.txt")" -gt 100 ]; then
+                echo "Showing the first 100 lines, highest risk first. The full report is in the \`${REPORT_ARTIFACT}\` artifact."
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit $status
+        env:
+          REPORT_ARTIFACT: ${{ inputs.report-artifact }}
+          FAIL_ON: ${{ inputs.fail-on }}
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+
+      - name: Upload Grype reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ${{ inputs.report-artifact }}
+          path: reports/
+          retention-days: ${{ inputs.retention-days }}
