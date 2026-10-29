@@ -173,13 +173,13 @@ jobs:
           private_key: ${{ secrets.RELEASE_VERSION_BOT_PRIVATE_KEY }}
 
       - name: Push changes
-        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa # master on Jul 1, 2024
+        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa # v1.0.0
         with:
           branch: ${{ github.ref }}
           github_token: ${{ steps.auth.outputs.token }}
 
       - name: Push changes to tag
-        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa # master on Jul 1, 2024
+        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa # v1.0.0
         with:
           branch: ${{ github.ref }}
           tags: true
