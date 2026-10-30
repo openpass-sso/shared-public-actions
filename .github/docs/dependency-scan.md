@@ -23,11 +23,13 @@ caller workflow
 Grype is treated as untrusted code, so the scan runs in its own job on its own runner:
 
 - no token permissions, no secrets and no cloud credentials
-- it only reads an SBOM artifact and only writes a report artifact
-- the worst a compromised Grype can do is publish a false report, so keep independent signals
-  (for example a registry scan or `npm audit`) alongside it
+- it only reads an SBOM artifact and only writes a report artifact and the Grype database cache, and the caller
+  decides whether the cache can be saved (see "Cache")
+- the worst a compromised Grype can do is publish a false report, or leave a bad database in the cache for later
+  runs, so keep independent signals (for example a registry scan or `npm audit`) alongside it
 
-Do not add secrets, `id-token`, checkout or cache-writing steps to this workflow.
+Do not add secrets, `id-token`, checkout or any other cache or artifact writes to this workflow. The Grype database
+cache is the one cache write it makes.
 
 ## Usage
 
@@ -41,7 +43,7 @@ jobs:
       # ... checkout, build, and write the SBOMs into <dir>/sbom/ (see "Input artifact" below) ...
       - uses: actions/upload-artifact@<sha> # v7.x.x
         with:
-          name: sbom-${{ github.run_id }}
+          name: sbom-${{ github.run_id }}-${{ github.run_attempt }}
           path: <dir>/
 
   scan:
@@ -50,7 +52,7 @@ jobs:
     cache-mode: read  # use write only for trusted runs from the default branch
     uses: openpass-sso/shared-public-actions/.github/workflows/grype-scan.yml@main
     with:
-      sbom-artifact: sbom-${{ github.run_id }}
+      sbom-artifact: sbom-${{ github.run_id }}-${{ github.run_attempt }}
       fail-on: critical
 ```
 
@@ -104,8 +106,16 @@ build, scan the npm SBOM again, because it is then the only record of the bundle
 |-------|----------|---------|-------------|
 | `sbom-artifact` | yes | | Name of the artifact described above |
 | `fail-on` | no | `critical` | Fail the job on findings at or above this severity: `negligible`, `low`, `medium`, `high` or `critical` |
-| `report-artifact` | no | `grype-reports` | Name of the report artifact |
+| `report-artifact` | no | `grype-reports` | Base name of the report artifact. The run attempt is appended, so the default produces `grype-reports-1` |
 | `retention-days` | no | `30` | How long the report artifact is kept |
+
+Artifact names must be unique within a run, so a second upload with the same name fails:
+
+- Include `github.run_attempt` in the SBOM artifact name, as in the example. "Re-run failed jobs" keeps the artifacts
+  of earlier attempts, and this workflow is meant to fail on findings, so re-runs are common. The workflow appends
+  the attempt to the report name itself.
+- Give every call in a run its own `report-artifact` and `sbom-artifact`, for example in a matrix:
+  `report-artifact: grype-reports-${{ matrix.service }}`.
 
 ## Reading the result
 
@@ -140,8 +150,11 @@ you need to look back.
 
 The Grype vulnerability database is cached to speed up scans. Callers choose the cache access with
 `cache-mode` on the calling job: `write` only for trusted runs from the default branch, `read` for everything
-else. GitHub enforces it, and this workflow cannot get more than the caller grants. The cache belongs to the
+else. A run that can write the cache could leave a bad database for later runs, which is why `write` is limited to
+trusted runs. GitHub enforces it, and this workflow cannot get more than the caller grants. The cache belongs to the
 calling repository.
+
+See https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode/
 
 ## Configuration
 

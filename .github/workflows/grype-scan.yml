@@ -6,8 +6,9 @@ name: "Security: Dependency Scan"
 #   - gets no token permissions, no secrets and no cloud credentials
 #   - never checks out the repository and only reads an artifact that an earlier job produced
 #   - runs on its own runner, separate from the job that builds and pushes the image
-#   - only writes a report artifact, so the worst a compromised Grype can do is lie in that report
-# Keep it that way: do not add secrets, id-token or checkout steps here.
+#   - only writes a report artifact and the Grype DB cache, and the caller decides whether the cache can be saved
+#     (see Cache below), so the worst a compromised Grype can do is lie in that report or in a cached DB
+# Keep it that way: do not add secrets, id-token, checkout or any other cache or artifact writes here.
 #
 # Input artifact layout (built by the caller):
 #   sbom/*.json            SBOMs to scan (SPDX or CycloneDX)
@@ -32,7 +33,7 @@ on:
         type: string
         default: "critical"
       report-artifact:
-        description: "Name of the artifact the reports are uploaded as"
+        description: "Base name of the report artifact. The run attempt is appended, so re-runs do not conflict. Must be unique per call in a run, for example in a matrix."
         required: false
         type: string
         default: "grype-reports"
@@ -98,13 +99,26 @@ jobs:
         # The DB changes daily, so the key changes daily and restore-keys falls back to the latest older DB
         run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Grype DB
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore and save are separate steps because the post step of actions/cache does not run when the job fails,
+      # and this job fails on purpose when there are findings
+      - name: Restore Grype DB cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/grype-db
           key: grype-db-${{ env.GRYPE_VERSION }}-${{ steps.cache-date.outputs.date }}
           restore-keys: |
             grype-db-${{ env.GRYPE_VERSION }}-
+
+      - name: Update Grype DB
+        id: db
+        # Its own step, so the cache is saved only after a complete download that Grype has validated
+        run: |
+          grype db update
+          grype db status
+        env:
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
 
       - name: Scan SBOMs
         run: |
@@ -188,25 +202,37 @@ jobs:
                 ' "reports/grype-${name}.json" || true
                 echo
               fi
-              echo '```'
-              head -n 100 "reports/grype-${name}.txt"
-              echo '```'
-              if [ "$(wc -l < "reports/grype-${name}.txt")" -gt 100 ]; then
-                echo "Showing the first 100 lines, highest risk first. The full report is in the \`${REPORT_ARTIFACT}\` artifact."
+              if [ -f "reports/grype-${name}.txt" ]; then
+                echo '```'
+                head -n 100 "reports/grype-${name}.txt"
+                echo '```'
+                if [ "$(wc -l < "reports/grype-${name}.txt")" -gt 100 ]; then
+                  echo "Showing the first 100 lines, highest risk first. The full report is in the \`${REPORT_ARTIFACT}\` artifact."
+                fi
+              else
+                echo "**Grype did not produce a report for this SBOM.** See the step log for the error."
               fi
             } >> "$GITHUB_STEP_SUMMARY"
           done
           exit $status
         env:
-          REPORT_ARTIFACT: ${{ inputs.report-artifact }}
+          REPORT_ARTIFACT: ${{ inputs.report-artifact }}-${{ github.run_attempt }}
           FAIL_ON: ${{ inputs.fail-on }}
           GRYPE_CHECK_FOR_APP_UPDATE: "false"
           GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+
+      - name: Save Grype DB cache
+        # Runs even when the scan fails on findings, but not when the DB update failed
+        if: always() && steps.db.outcome == 'success' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/grype-db
+          key: grype-db-${{ env.GRYPE_VERSION }}-${{ steps.cache-date.outputs.date }}
 
       - name: Upload Grype reports
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: ${{ inputs.report-artifact }}
+          name: ${{ inputs.report-artifact }}-${{ github.run_attempt }}
           path: reports/
           retention-days: ${{ inputs.retention-days }}
