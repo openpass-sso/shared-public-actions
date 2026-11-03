@@ -29,8 +29,5 @@ from the upstream release and verified against a pinned SHA256. Detection runs
 without live credential validation; output is redacted and no reports are uploaded.
 Local commit hooks use the same CLI release; see [hook setup](../secret-scanning.md).
 
-This repository runs the reusable implementation directly on its own PRs, so it
-can be tested before consumers use it at `main`. Merge this PR before consumer PRs;
-their reference cannot resolve until this workflow exists on `main`. After merging,
-rerun consumers and verify the exact nested check context before requiring it.
-The `main` reference is explicitly trusted for this OpenPass-managed repository.
+Before making the workflow required, confirm its exact check name and GitHub
+Actions App in a successful caller run.
