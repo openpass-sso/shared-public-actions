@@ -4,3 +4,4 @@ Repository to contain shared public facing GitHub Action workflows.
 
 - [GitHub Actions Security Scanning](.github/docs/github-actions-security-scanning.md)
 - [Dependency Scan (Grype)](.github/docs/dependency-scan.md)
+- [Secret Scan (Betterleaks)](.github/docs/secret-scanning.md)
