@@ -1,5 +1,0 @@
-rules:
-  unpinned-uses:
-    config:
-      policies:
-        openpass-sso/shared-public-actions/*: ref-pin
