@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   pinact-scan:
-    uses: ./.github/workflows/pinact-scan.yml
+    uses: $/.github/workflows/pinact-scan.yml
 
   zizmor-scan:
-    uses: ./.github/workflows/zizmor-scan.yml
+    uses: $/.github/workflows/zizmor-scan.yml
